@@ -1,0 +1,12 @@
+*.img
+*.bin
+*.ini
+*.map
+*.o
+*.out
+*.zst
+*.gz
+*.vmdk
+
+bochs/src
+bcohs/pkg
