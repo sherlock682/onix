@@ -1,6 +1,7 @@
 //基础的显卡驱动
 #include <onix/console.h>
 #include <onix/io.h>
+#include <onix/string.h>
 
 #define CRT_ADDR_REG 0x3D4
 #define CRT_DATA_REG 0x3D5
@@ -33,7 +34,7 @@ static u32 screen;//显示器开始的内存的位置
 
 static u32 pos;//记录当前光标的位置坐标
 
-static x, y;//当前光标的坐标
+static u32 x, y;//当前光标的坐标
 
 static u8 attr = 7;//字符样式
 
@@ -51,9 +52,165 @@ static void get_screen()
     screen += MEM_BASE;
 }
 
-void console_clear();
-void console_write(char *buf, u32 count);
+//设置当前显示器开始的位置
+static void set_screen()
+{
+    outb(CRT_ADDR_REG, CRT_START_ADDR_H);
+    outb(CRT_DATA_REG, ((screen - MEM_BASE) >> 9) & 0xff);
+    outb(CRT_ADDR_REG, CRT_START_ADDR_L);
+    outb(CRT_DATA_REG, ((screen - MEM_BASE) >> 1) & 0xff);
+}
 
-void console_init(){
+//获得当前光标的位置
+static void get_cursor(){
+    outb(CRT_ADDR_REG, CRT_CURSOR_H);
+    pos = inb(CRT_DATA_REG) << 8;
+    outb(CRT_ADDR_REG, CRT_CURSOR_L);
+    pos |= inb(CRT_DATA_REG);
+
     get_screen();
+
+    pos <<= 1;
+    pos += MEM_BASE;
+
+    u32 delta = (pos - screen) >> 1;
+    x = delta % WIDTH;
+    y = delta / WIDTH;
+}
+
+static void set_cursor()
+{
+    outb(CRT_ADDR_REG, CRT_CURSOR_H);
+    outb(CRT_DATA_REG, ((pos - MEM_BASE) >> 9) & 0xff);
+    outb(CRT_ADDR_REG, CRT_CURSOR_L);
+    outb(CRT_DATA_REG, ((pos - MEM_BASE) >> 1) & 0xff);
+}
+
+void console_clear()
+{
+    screen = MEM_BASE;
+    pos = MEM_BASE;
+    x = y = 0;
+    set_cursor();
+    set_screen();
+
+    u16 *ptr = (u16 *)MEM_BASE;
+    while (ptr < (u16 *)MEM_END)
+    {
+        *ptr++ = erase;
+    }
+}
+
+//向上滚一行
+static void scroll_up()
+{
+    if(screen + SCR_SIZE + ROW_SIZE < MEM_END)
+    {
+        u32 *ptr = (u32 *)(screen + SCR_SIZE);
+        for (size_t i = 0; i < WIDTH;i++)
+        {
+            *ptr++ = erase;
+        }
+        screen += ROW_SIZE;
+        pos += ROW_SIZE;
+    }
+    else
+    {
+        memcpy((void *)MEM_BASE, (void *)screen, SCR_SIZE);
+        pos -= (screen - MEM_BASE);
+        screen = MEM_BASE;
+    }
+    set_screen();
+}
+
+static void command_lf()
+{
+    if(y+1 < HEIGHT)
+    {
+        y++;
+        pos += ROW_SIZE;
+        return;
+    }
+    scroll_up();
+}
+
+static void command_cr()
+{
+    pos -= (x << 1);
+    x = 0;
+}
+
+static void command_bs()
+{
+    if (x)
+    {
+        x--;
+        pos -= 2;
+        *(u16 *)pos = erase;
+    }
+}
+
+static void command_del()
+{
+    *(u16 *)pos = erase;
+}
+
+void console_write(char *buf, u32 count)
+{
+    char ch;
+    while (count--)
+    {
+        ch = *buf++;
+        switch (ch)
+        {
+        case ASCII_NUL:
+            break;
+        case ASCII_ENQ:
+            break;
+        case ASCII_BEL:
+        //.todo.\a
+            break;
+        case ASCII_BS:
+            command_bs();
+            break;
+        case ASCII_HT:
+            break;
+        case ASCII_LF:
+            command_lf();
+            command_cr();
+            break;
+        case ASCII_VT:
+            break;
+        case ASCII_FF:
+            command_lf();
+            break;
+        case ASCII_CR:
+            command_cr();
+            break;
+        case ASCII_DEL:
+            command_del();
+            break;
+        default:
+            if(x>=WIDTH)
+            {
+                x -= WIDTH;
+                pos -= ROW_SIZE;
+                command_lf();
+            }
+
+            *((char *)pos) = ch;
+            pos++;
+            *((char *)pos) = attr;
+            pos++;
+
+            x++;
+            break;
+        }
+    }
+    set_cursor();
+}
+
+void console_init()
+{
+    console_clear();
 }
