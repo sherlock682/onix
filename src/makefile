@@ -19,7 +19,7 @@ $(BUILD)/boot/%.bin: $(SRC)/boot/%.asm
 	$(shell mkdir -p $(dir $@))
 	nasm -f bin $< -o $@
 
-$(BUILD)/%.o: $(SRC)/%.asm
+$(BUILD)/%.o: $(SRC)/%.asm 
 	$(shell mkdir -p $(dir $@))
 	nasm -gdwarf -f elf32 $(DEBUG) $< -o $@
 	
@@ -37,6 +37,7 @@ $(BUILD)/kernel.bin: \
 	$(BUILD)/kernel/debug.o \
 	$(BUILD)/kernel/global.o \
 	$(BUILD)/kernel/task.o \
+	$(BUILD)/kernel/schedule.o \
 	$(BUILD)/lib/string.o \
 	$(BUILD)/lib/vsprintf.o \
 
