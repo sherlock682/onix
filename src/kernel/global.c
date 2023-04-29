@@ -10,7 +10,7 @@ void gdt_init()
 
     DEBUGK("init gdt!!!\n");
 
-    asm volatile("sgdt gdt_ptr");
+    asm volatile("sgdt gdt_ptr\n");
 
     memcpy(&gdt, (void *)gdt_ptr.base, gdt_ptr.limit + 1);
 

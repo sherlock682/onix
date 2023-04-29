@@ -18,7 +18,13 @@
         "io.h": "c",
         "debug.h": "c",
         "task.h": "c",
-        "string.h": "c"
+        "string.h": "c",
+        "global.h": "c",
+        "interrupt.h": "c",
+        "cstdarg": "c",
+        "random": "cpp",
+        "stdlib.h": "c",
+        "algorithm": "c"
     },
     "C_Cpp.errorSquiggles": "disabled"
 }

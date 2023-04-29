@@ -3,13 +3,16 @@ SRC:=.
 
 ENTRYPOINY:=0x10000
 
-CFLAGS:= -m32
-CFLAGS+= -fno-builtin
-CFLAGS+= -nostdinc
-CFLAGS+= -fno-pic
-CFLAGS+= -fno-pie
-CFLAGS+= -nostdlib
-CFLAGS+= -fno-stack-protector
+CFLAGS:= -m32 					# 32 位的程序
+CFLAGS+= -march=pentium			# pentium 处理器
+CFLAGS+= -fno-builtin			# 不需要 gcc 内置函数
+CFLAGS+= -nostdinc				# 不需要标准头文件
+CFLAGS+= -fno-pic				# 不需要位置无关的代码  position independent code
+CFLAGS+= -fno-pie				# 不需要位置无关的可执行程序 position independent executable
+CFLAGS+= -nostdlib				# 不需要标准库
+CFLAGS+= -fno-stack-protector	# 不需要栈保护
+CFLAGS+= -DONIX					# 定义 ONIX
+CFLAGS+= -DONIX_DEBUG			# 定义 ONIX_DEBUG
 CFLAGS:=$(strip ${CFLAGS})
 
 DEBUG:= -g
@@ -38,8 +41,11 @@ $(BUILD)/kernel.bin: \
 	$(BUILD)/kernel/global.o \
 	$(BUILD)/kernel/task.o \
 	$(BUILD)/kernel/schedule.o \
+	$(BUILD)/kernel/interrupt.o \
+	$(BUILD)/kernel/handler.o \
 	$(BUILD)/lib/string.o \
 	$(BUILD)/lib/vsprintf.o \
+	$(BUILD)/lib/stdlib.o \
 
 	$(shell mkdir -p $(dir $@))
 	ld -m elf_i386 -static $^ -o $@ -Ttext $(ENTRYPOINY)
@@ -87,7 +93,7 @@ qemug: $(BUILD)/master.img
 	-s -S \
 	-m 32M \
 	-boot c \
-	-drive format=raw,file=$<
+	-hda $<
 
 
 $(BUILD)/master.vmdk:$(BUILD)/master.img
