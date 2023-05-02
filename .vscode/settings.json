@@ -24,7 +24,9 @@
         "cstdarg": "c",
         "random": "cpp",
         "stdlib.h": "c",
-        "algorithm": "c"
+        "algorithm": "c",
+        "memory.h": "c",
+        "cmath": "c"
     },
     "C_Cpp.errorSquiggles": "disabled"
 }

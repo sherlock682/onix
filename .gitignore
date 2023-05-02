@@ -6,7 +6,6 @@
 *.out
 *.zst
 *.gz
-*.vmdk
 
 bochs/src
 bcohs/pkg

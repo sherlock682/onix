@@ -1,15 +1,19 @@
 #ifndef ONIX_TYPES_H
 #define ONIX_TYPES_H
 
+#include <onix/onix.h>
+
 #define EOF -1
 
 #define NULL ((void *)0)
 
 #define EOS '\0'
 
+#ifndef __cplusplus
 #define bool _Bool
 #define true 1
 #define false 0
+#endif
 
 #define _packed __attribute__((packed))
 
@@ -29,5 +33,7 @@ typedef unsigned char u8;
 typedef unsigned short u16;
 typedef unsigned int u32;
 typedef unsigned long long u64;
+
+typedef u32 time_t;
 
 #endif

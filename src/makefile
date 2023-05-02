@@ -4,15 +4,13 @@ SRC:=.
 ENTRYPOINY:=0x10000
 
 CFLAGS:= -m32 					# 32 位的程序
-CFLAGS+= -march=pentium			# pentium 处理器
 CFLAGS+= -fno-builtin			# 不需要 gcc 内置函数
 CFLAGS+= -nostdinc				# 不需要标准头文件
 CFLAGS+= -fno-pic				# 不需要位置无关的代码  position independent code
 CFLAGS+= -fno-pie				# 不需要位置无关的可执行程序 position independent executable
 CFLAGS+= -nostdlib				# 不需要标准库
 CFLAGS+= -fno-stack-protector	# 不需要栈保护
-CFLAGS+= -DONIX					# 定义 ONIX
-CFLAGS+= -DONIX_DEBUG			# 定义 ONIX_DEBUG
+
 CFLAGS:=$(strip ${CFLAGS})
 
 DEBUG:= -g
@@ -43,6 +41,10 @@ $(BUILD)/kernel.bin: \
 	$(BUILD)/kernel/schedule.o \
 	$(BUILD)/kernel/interrupt.o \
 	$(BUILD)/kernel/handler.o \
+	$(BUILD)/kernel/clock.o \
+	$(BUILD)/kernel/time.o \
+	$(BUILD)/kernel/rtc.o \
+	$(BUILD)/kernel/memory.o \
 	$(BUILD)/lib/string.o \
 	$(BUILD)/lib/vsprintf.o \
 	$(BUILD)/lib/stdlib.o \
@@ -64,6 +66,7 @@ $(BUILD)/master.img: $(BUILD)/boot/boot.bin \
 	yes | bximage -q -hd=16 -func=create -sectsize=512 -imgmode=flat $@
 	dd if=$(BUILD)/boot/boot.bin of=$@ bs=512 count=1 conv=notrunc
 	dd if=$(BUILD)/boot/loader.bin of=$@ bs=512 count=4 seek=2 conv=notrunc
+	test -n "$$(find $(BUILD)/system.bin -size -100k)"    
 	dd if=$(BUILD)/system.bin of=$@ bs=512 count=200 seek=10 conv=notrunc
 
 test:$(BUILD)/master.img
@@ -80,20 +83,22 @@ bochs: $(BUILD)/master.img
 bochsg: $(BUILD)/master.img
 	bochs-gdb -q -f ../bochs/bochsrc.gdb 
 
-.PHONY: qemu
-qemu: $(BUILD)/master.img
-	qemu-system-i386 \
+QEMU:=qemu-system-i386 \
 	-m 32M \
 	-boot c \
-	-hda $<
+	-drive file=$(BUILD)/master.img,if=ide,index=0,media=disk,format=raw \
+	-audiodev pa,id=hda \
+	-machine pcspk-audiodev=hda \
+	-rtc base=localtime
+
+.PHONY: qemu
+qemu: $(BUILD)/master.img
+	$(QEMU)
+	
 
 .PHONY: qemug
 qemug: $(BUILD)/master.img
-	qemu-system-i386 \
-	-s -S \
-	-m 32M \
-	-boot c \
-	-hda $<
+	$(QEMU) -s -S
 
 
 $(BUILD)/master.vmdk:$(BUILD)/master.img

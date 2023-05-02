@@ -36,7 +36,7 @@ detect_memory:
     add di,cx
 
     ;将结构体的数量加一
-    inc word[ards_count]
+    inc dword [ards_count]
 
     cmp ebx,0
     jnz .next
@@ -108,6 +108,9 @@ protect_mode:
     mov bl,200; 扇区的数量
 
     call read_disk
+
+    mov eax,0x20220205
+    mov ebx,ards_count
 
     jmp dword code_selector:0x10000
 
@@ -225,5 +228,5 @@ gdt_data:
 gdt_end:
 
 ards_count:
-    dw 0
+    dd 0
 ards_buffer:
