@@ -8,6 +8,7 @@ extern void interrupt_init();
 extern void clock_init();
 extern void time_init();
 extern void rtc_init();
+extern void memory_test();
 extern void hang();
 
 void kernel_init()
@@ -19,10 +20,8 @@ void kernel_init()
     // time_init();
     // rtc_init();
 
-    BMB;
 
-    char *ptr = (char *)(0x100000 * 20);
-    ptr[0] = 'a';
+    memory_test();
     // task_init();
     // asm volatile("sti");
     hang();

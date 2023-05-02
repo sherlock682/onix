@@ -17,6 +17,18 @@
 #define PAGE(idx) ((u32)idx << 12)             // 获取页索引 idx 对应的页开始的位置
 #define ASSERT_PAGE(addr) assert((addr & 0xfff) == 0)
 
+// 内核页目录
+#define KERNEL_PAGE_DIR 0x1000
+
+//内核页表索引
+static u32 KERNEL_PAGE_TABLE[] = {
+    0x2000,
+    0x3000,
+};
+
+#define KERNEL_MEMORY_SIZE (0x100000 * sizeof(KERNEL_PAGE_TABLE))
+
+
 typedef struct ards_t
 {
     u64 base; // 内存基地址
@@ -24,10 +36,10 @@ typedef struct ards_t
     u32 type; // 类型
 } _packed ards_t;
 
-u32 memory_base = 0; // 可用内存基地址，应该等于 1M
-u32 memory_size = 0; // 可用内存大小
-u32 total_pages = 0; // 所有内存页数
-u32 free_pages = 0;  // 空闲内存页数
+static u32 memory_base = 0; // 可用内存基地址，应该等于 1M
+static u32 memory_size = 0; // 可用内存大小
+static u32 total_pages = 0; // 所有内存页数
+static u32 free_pages = 0;   // 空闲内存页数
 
 #define used_pages (total_pages - free_pages) // 已用页数
 
@@ -68,6 +80,11 @@ void memory_init(u32 magic, u32 addr)
 
     LOGK("Total pages %d\n", total_pages);
     LOGK("Free pages %d\n", free_pages);
+
+    if(memory_size < KERNEL_MEMORY_SIZE)
+    {
+        panic("System memory is %dM too small,at least %dM needed\n", memory_size / MEMORY_BASE, KERNEL_MEMORY_SIZE / MEMORY_BASE);
+    }
 }
 
 static u32 start_page = 0; // 可分配物理内存起始位置
@@ -142,22 +159,8 @@ static void put_page(u32 addr)
     LOGK("PUT page 0x%p\n", addr);
 }
 
-void memory_test()
-{
-    u32 pages[10];
-    for (size_t i = 0; i < 10; i++)
-    {
-        pages[i] = get_page();
-    }
-
-    for (size_t i = 0; i < 10; i++)
-    {
-        put_page(pages[i]);
-    }
-}
-
 //得到cr3寄存器
-u32 get_cr3()
+u32 inline get_cr3()
 {
     asm volatile("movl %cr3,%eax\n");
 }
@@ -170,7 +173,7 @@ void set_cr3(u32 pde)
 }
 
 //将cr0寄存器最高位PE置为1，启用分页
-static void enable_page()
+static _inline void enable_page()
 {
     asm volatile(
         "movl %cr0,%eax\n"
@@ -188,38 +191,95 @@ static void entry_init(page_entry_t *entry,u32 index)
     entry->index = index;
 }
 
-//内核页目录
-#define KERNEL_PAGE_DIR 0x200000
-
-//内核目录
-#define KERNEL_PAGE_ENTRY 0x201000
-
 //初始化内核映射
 void mapping_init()
 {
     page_entry_t *pde = (page_entry_t *)KERNEL_PAGE_DIR;
     memset(pde, 0, PAGE_SIZE);
 
-    entry_init(&pde[0], IDX(KERNEL_PAGE_ENTRY));
+    idx_t index = 0;
 
-    page_entry_t *pte = (page_entry_t *)KERNEL_PAGE_ENTRY;
-    memset(pte, 0, PAGE_SIZE);
-
-    page_entry_t *entry;
-    for (size_t tidx = 0; tidx < 1024;tidx++)
+    for (idx_t didx = 0; didx < (sizeof(KERNEL_PAGE_TABLE) / 4); didx++)
     {
-        entry = &pte[tidx];
-        entry_init(entry, tidx);
-        memory_map[tidx] = 1;//设置物理内存数组，该页已被占用
+        page_entry_t *pte = (page_entry_t *)KERNEL_PAGE_TABLE[didx];
+        memset(pte, 0, PAGE_SIZE);
+
+        page_entry_t *dentry = &pde[didx];
+        entry_init(dentry, IDX((u32)pte));
+
+        for (size_t tidx = 0; tidx < 1024; tidx++, index++)
+        {
+            // 第 0 页不映射，为造成空指针访问，缺页异常，便于排错
+            if (index == 0)
+                continue;
+
+            page_entry_t *tentry = &pte[tidx];
+            entry_init(tentry, index);
+            memory_map[index] = 1;      // 设置物理内存数组，该页被占用
+        }
     }
 
-    BMB;
+    //将最后一个页表指向页目录自己，方便修改
+    page_entry_t *entry=&pde[1023];
+    entry_init(entry, IDX(KERNEL_PAGE_DIR));
 
     //设置cr3寄存器
     set_cr3((u32)pde);
 
     BMB;
-
     //分页有效
     enable_page();
+}
+
+// 获取页目录
+static page_entry_t *get_pde()
+{
+    return (page_entry_t *)(0xfffff000);
+}
+
+// 获取虚拟地址 vaddr 对应的页表
+static page_entry_t *get_pte(u32 vaddr)
+{
+    return (page_entry_t *)(0xffc00000 | (DIDX(vaddr) << 12));
+}
+
+void flush_tlb(u32 vaddr)
+{
+    asm volatile("invlpg (%0)" ::"r"(vaddr)
+                 : "memory");
+}
+
+void memory_test()
+{
+    BMB;
+
+    u32 vaddr = 0x4000000;
+    u32 paddr = 0x1400000;
+    u32 table = 0x900000;
+
+    page_entry_t *pde = get_pde();
+
+    page_entry_t *dentry = &pde[DIDX(vaddr)];
+    entry_init(dentry, IDX(table));
+
+    page_entry_t *pte = get_pte(vaddr);
+    page_entry_t *tentry = &pte[TIDX(vaddr)];
+
+    entry_init(tentry, IDX(paddr));
+
+    BMB;
+
+    char *ptr = (char *)(0x4000000);
+    ptr[0] = 'a';
+
+    BMB;
+
+    entry_init(tentry, IDX(0x1500000));
+    flush_tlb(vaddr);
+
+    BMB;
+
+    ptr[2] = 'b';
+
+    BMB;
 }
