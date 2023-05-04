@@ -26,7 +26,9 @@
         "stdlib.h": "c",
         "algorithm": "c",
         "memory.h": "c",
-        "cmath": "c"
+        "cmath": "c",
+        "syscall.h": "c",
+        "list.h": "c"
     },
     "C_Cpp.errorSquiggles": "disabled"
 }

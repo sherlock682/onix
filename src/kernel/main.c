@@ -10,6 +10,8 @@ extern void clock_init();
 extern void time_init();
 extern void rtc_init();
 extern void task_init();
+extern void syscall_init();
+extern void list_test();
 extern void hang();
 
 void intr_test()
@@ -31,6 +33,9 @@ void kernel_init()
     // rtc_init();
 
     task_init();
-    set_interrupt_state(true);
-    // asm volatile("sti");
+    syscall_init();
+
+    list_test();
+
+    // set_interrupt_state(true);
 }

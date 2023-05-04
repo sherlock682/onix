@@ -38,6 +38,7 @@ $(BUILD)/kernel.bin: \
 	$(BUILD)/kernel/debug.o \
 	$(BUILD)/kernel/global.o \
 	$(BUILD)/kernel/task.o \
+	$(BUILD)/kernel/gate.o \
 	$(BUILD)/kernel/schedule.o \
 	$(BUILD)/kernel/interrupt.o \
 	$(BUILD)/kernel/handler.o \
@@ -49,6 +50,8 @@ $(BUILD)/kernel.bin: \
 	$(BUILD)/lib/string.o \
 	$(BUILD)/lib/vsprintf.o \
 	$(BUILD)/lib/stdlib.o \
+	$(BUILD)/lib/syscall.o \
+	$(BUILD)/lib/list.o \
 
 	$(shell mkdir -p $(dir $@))
 	ld -m elf_i386 -static $^ -o $@ -Ttext $(ENTRYPOINY)

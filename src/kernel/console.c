@@ -2,6 +2,7 @@
 #include <onix/console.h>
 #include <onix/io.h>
 #include <onix/string.h>
+#include <onix/interrupt.h>
 
 #define CRT_ADDR_REG 0x3D4
 #define CRT_DATA_REG 0x3D5
@@ -158,6 +159,8 @@ extern void start_beep();
 
 void console_write(char *buf, u32 count)
 {
+    bool intr = interrupt_disable();//静止中断
+
     char ch;
     while (count--)
     {
@@ -209,6 +212,7 @@ void console_write(char *buf, u32 count)
         }
     }
     set_cursor();
+    set_interrupt_state(intr);//恢复中断
 }
 
 void console_init()
