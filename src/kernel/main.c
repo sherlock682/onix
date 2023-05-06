@@ -11,17 +11,7 @@ extern void time_init();
 extern void rtc_init();
 extern void task_init();
 extern void syscall_init();
-extern void list_test();
 extern void hang();
-
-void intr_test()
-{
-    bool intr = interrupt_disable();
-
-    //临界区
-
-    set_interrupt_state(intr);
-}
 
 void kernel_init()
 {
@@ -34,8 +24,5 @@ void kernel_init()
 
     task_init();
     syscall_init();
-
-    list_test();
-
-    // set_interrupt_state(true);
+    set_interrupt_state(true);
 }

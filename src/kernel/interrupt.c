@@ -176,21 +176,21 @@ void pic_init()
 
 void idt_init()
 {
-    for (size_t i = 0; i < IDT_SIZE;i++)
+    for (size_t i = 0; i < ENTRY_SIZE; i++)
     {
         gate_t *gate = &idt[i];
         handler_t handler = handler_entry_table[i];
+
         gate->offset0 = (u32)handler & 0xffff;
         gate->offset1 = ((u32)handler >> 16) & 0xffff;
-        gate->selector = 1 << 3;
-        gate->reserved = 0;
-        gate->type = 0b1110;
-        gate->segment = 0;
-        gate->DPL = 0;
-        gate->present = 1;
+        gate->selector = 1 << 3; // 代码段
+        gate->reserved = 0;      // 保留不用
+        gate->type = 0b1110;     // 中断门
+        gate->segment = 0;       // 系统段
+        gate->DPL = 0;           // 内核态
+        gate->present = 1;       // 有效
     }
-
-    for (size_t i = 0; i < 0x20;i++)
+    for (size_t i = 0; i < 0x20; i++)
     {
         handler_table[i] = exception_handler;
     }
@@ -198,8 +198,7 @@ void idt_init()
     {
         handler_table[i] = default_handler;
     }
-
-    //初始化系统调用
+    // 初始化系统调用
     gate_t *gate = &idt[0x80];
     gate->offset0 = (u32)syscall_handler & 0xffff;
     gate->offset1 = ((u32)syscall_handler >> 16) & 0xffff;
