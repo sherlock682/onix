@@ -17,6 +17,7 @@ void idle_thread()
     }
 }
 
+
 void init_thread()
 {
     set_interrupt_state(true);
@@ -24,7 +25,7 @@ void init_thread()
 
     while (true)
     {
-        LOGK("init task %d....\n",counter++);
+        // LOGK("init task %d....\n", counter++);
         sleep(500);
     }
 }
@@ -36,7 +37,7 @@ void test_thread()
 
     while(true)
     {
-        LOGK("tesk task %d....\n", counters++);
+        // LOGK("tesk task %d....\n", counters++);
         sleep(709);
     }
 }

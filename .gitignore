@@ -6,6 +6,8 @@
 *.out
 *.zst
 *.gz
+*.log
 
+build
 bochs/src
 bcohs/pkg
