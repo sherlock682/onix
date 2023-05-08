@@ -8,7 +8,7 @@ dw 0x55aa;魔数，判断错误
 mov si,loading
 call print
 
-xchg bx,bx;魔数断点
+; xchg bx,bx;魔数断点
 
 detect_memory:
     ;将ebx置为0
@@ -93,7 +93,7 @@ error:
 
 [bits 32]
 protect_mode:
-    xchg bx,bx;断点
+    ; xchg bx,bx;断点
     mov ax,data_selector
     mov ds,ax
     mov es,ax

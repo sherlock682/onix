@@ -51,7 +51,6 @@ void clock_handler(int vector)
 
     jiffies++;
     // DEBUGK("clock jiffies %d ...\n", jiffies);
-    BMB;
     task_t *task = running_task();
     assert(task->magic == ONIX_MAGIC);
 

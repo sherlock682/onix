@@ -62,6 +62,7 @@ $(BUILD)/kernel.bin: \
 	$(BUILD)/lib/stdlib.o \
 	$(BUILD)/lib/syscall.o \
 	$(BUILD)/lib/list.o \
+	$(BUILD)/lib/fifo.o \
 
 	$(shell mkdir -p $(dir $@))
 	ld ${LDFLAGS} $^ -o $@
@@ -85,15 +86,15 @@ $(BUILD)/master.img: $(BUILD)/boot/boot.bin \
 
 $(BUILD)/kernel.iso : $(BUILD)/kernel.bin $(SRC)/utils/grub.cfg
 
-#检测内核文件是否合法
+# 检测内核文件是否合法
 	grub-file --is-x86-multiboot2 $<
-#常见 iso 目录
+# 创建 iso 目录
 	mkdir -p $(BUILD)/iso/boot/grub
-#拷贝内核文件
+# 拷贝内核文件
 	cp $< $(BUILD)/iso/boot
-#拷贝 grub 配置文件
+# 拷贝 grub 配置文件
 	cp $(SRC)/utils/grub.cfg $(BUILD)/iso/boot/grub
-#生成 iso 文件
+# 生成 iso 文件
 	grub-mkrescue -o $@ $(BUILD)/iso
 
 image:$(BUILD)/master.img
@@ -136,7 +137,7 @@ qemu: $(BUILD)/master.img
 
 .PHONY: qemug
 qemug: $(BUILD)/master.img
-	$(QEMU) $(QEMU_DEBUG)
+	$(QEMU) $(QEMU_DISK) $(QEMU_DEBUG) 
 
 .PHONY: qemub
 qemub: $(BUILD)/kernel.iso
