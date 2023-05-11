@@ -157,12 +157,13 @@ static void command_del()
 
 extern void start_beep();
 
-void console_write(char *buf, u32 count)
+int32 console_write(char *buf, u32 count)
 {
     bool intr = interrupt_disable();//禁止中断
 
     char ch;
-    while (count--)
+    int32 nr = 0;
+    while (nr++<count)
     {
         ch = *buf++;
         switch (ch)
@@ -213,6 +214,7 @@ void console_write(char *buf, u32 count)
     }
     set_cursor();
     set_interrupt_state(intr);//恢复中断
+    return nr;
 }
 
 void console_init()

@@ -56,6 +56,7 @@ $(BUILD)/kernel.bin: \
 	$(BUILD)/kernel/memory.o \
 	$(BUILD)/kernel/thread.o \
 	$(BUILD)/kernel/keyboard.o \
+	$(BUILD)/kernel/arena.o \
 	$(BUILD)/lib/bitmap.o \
 	$(BUILD)/lib/string.o \
 	$(BUILD)/lib/vsprintf.o \
@@ -63,6 +64,7 @@ $(BUILD)/kernel.bin: \
 	$(BUILD)/lib/syscall.o \
 	$(BUILD)/lib/list.o \
 	$(BUILD)/lib/fifo.o \
+	$(BUILD)/lib/printf.o \
 
 	$(shell mkdir -p $(dir $@))
 	ld ${LDFLAGS} $^ -o $@
