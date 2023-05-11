@@ -6,6 +6,18 @@
 #define PAGE_SIZE 0x1000
 #define MEMORY_BASE 0x100000 //1M可用内存开始的位置
 
+//内核占用的内存大小 8M
+#define KERNEL_MEMORY_SIZE 0x800000
+
+//用户栈顶地址 128M
+#define USER_STACK_TOP 0x8000000
+
+// 用户栈最大 2M
+#define USER_STACK_SIZE 0x200000
+
+// 用户栈底地址
+#define USER_STACK_BOTTOM (USER_STACK_TOP - USER_STACK_SIZE)
+
 // 内核页目录
 #define KERNEL_PAGE_DIR 0x1000
 
@@ -32,12 +44,35 @@ typedef struct page_entry_t
     u32 index : 20;  // 页索引
 } _packed page_entry_t;
 
+//得到cr2寄存器
+u32 get_cr2();
+
+//得到cr3寄存器
 u32 get_cr3();
 
+//设置cr3寄存器，参数是页目录的地址
 void set_cr3(u32 pde);
 
+//分配count个连续的内核页
 u32 alloc_kpage(u32 count);
 
+//释放count个连续的内核页
 void free_kpage(u32 vaddr, u32 count);
+
+//将vaddr影视物理内存
+void link_page(u32 vaddr);
+
+//去掉vaddr对应的物理内存映射
+void unlink_page(u32 vaddr);
+
+//拷贝页目录
+page_entry_t *copy_pde();
+
+void page_fault(
+    u32 vector,
+    u32 edi, u32 esi, u32 ebp, u32 esp,
+    u32 ebx, u32 edx, u32 ecx, u32 eax,
+    u32 gs, u32 fs, u32 es, u32 ds,
+    u32 vector0, u32 error, u32 eip, u32 cs, u32 eflags);
 
 #endif

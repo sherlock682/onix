@@ -20,17 +20,25 @@ void idle_thread()
     }
 }
 
+void test_recursion()
+{
+    char tmp[400];
+    test_recursion();
+}
+
 static void real_init_thread()
 {
     u32 counter = 0;
-    while(true)
+
+    char ch;
+    while (true)
     {
+        // test();
+        printf("task is in user mode %d\n", counter++);
         BMB;
-        // asm volatile("in $0x92,%ax\n");
+        test_recursion();
         sleep(100);
         // LOGK("%c\n",ch);
-        // printk("task is in user mode %d\n", counter++);
-        // printf("task is in user mode %d\n", counter++);
     }
 }
 
@@ -48,20 +56,8 @@ void test_thread()
 
     while(true)
     {
-        // LOGK("tesk task %d....\n", counters++);
-        // sleep(709);
-        void *ptr = kmalloc(1200);
-        LOGK("kmallocox%p....\n", ptr);
-        kfree(ptr);
-
-        ptr = kmalloc(1024);
-        LOGK("kmallocox%p....\n", ptr);
-        kfree(ptr);
-
-        ptr = kmalloc(54);
-        LOGK("kmallocox%p....\n", ptr);
-        kfree(ptr);
-
+        LOGK("tesk task %d....\n", counters++);
+        BMB;
         sleep(2000);
     }
 }
