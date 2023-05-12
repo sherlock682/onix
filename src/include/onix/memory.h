@@ -65,14 +65,10 @@ void link_page(u32 vaddr);
 //去掉vaddr对应的物理内存映射
 void unlink_page(u32 vaddr);
 
-//拷贝页目录
+// 拷贝页目录
 page_entry_t *copy_pde();
 
-void page_fault(
-    u32 vector,
-    u32 edi, u32 esi, u32 ebp, u32 esp,
-    u32 ebx, u32 edx, u32 ecx, u32 eax,
-    u32 gs, u32 fs, u32 es, u32 ds,
-    u32 vector0, u32 error, u32 eip, u32 cs, u32 eflags);
+//系统调用brk
+int32 sys_brk(void *addr);
 
 #endif
