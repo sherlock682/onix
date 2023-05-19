@@ -39,6 +39,7 @@ $(BUILD)/kernel.bin: \
 	$(BUILD)/kernel/start.o \
 	$(BUILD)/kernel/main.o \
 	$(BUILD)/kernel/io.o \
+	$(BUILD)/kernel/device.o \
 	$(BUILD)/kernel/console.o \
 	$(BUILD)/kernel/printk.o \
 	$(BUILD)/kernel/assert.o \
@@ -57,6 +58,7 @@ $(BUILD)/kernel.bin: \
 	$(BUILD)/kernel/thread.o \
 	$(BUILD)/kernel/keyboard.o \
 	$(BUILD)/kernel/arena.o \
+	$(BUILD)/kernel/ide.o \
 	$(BUILD)/lib/bitmap.o \
 	$(BUILD)/lib/string.o \
 	$(BUILD)/lib/vsprintf.o \
@@ -79,72 +81,56 @@ $(BUILD)/master.img: $(BUILD)/boot/boot.bin \
 	$(BUILD)/boot/loader.bin \
 	$(BUILD)/system.bin \
 	$(BUILD)/system.map \
+	$(SRC)/utils/master.sfdisk \
 
 	yes | bximage -q -hd=16 -func=create -sectsize=512 -imgmode=flat $@
 	dd if=$(BUILD)/boot/boot.bin of=$@ bs=512 count=1 conv=notrunc
 	dd if=$(BUILD)/boot/loader.bin of=$@ bs=512 count=4 seek=2 conv=notrunc
 	test -n "$$(find $(BUILD)/system.bin -size -100k)"    
 	dd if=$(BUILD)/system.bin of=$@ bs=512 count=200 seek=10 conv=notrunc
+	sfdisk $@ < $(SRC)/utils/master.sfdisk 
 
-$(BUILD)/kernel.iso : $(BUILD)/kernel.bin $(SRC)/utils/grub.cfg
+$(BUILD)/slave.img:
+#创建一个32M的硬盘镜像
+	yes | bximage -q -hd=32 -func=create -sectsize=512 -imgmode=flat $@
 
-# 检测内核文件是否合法
-	grub-file --is-x86-multiboot2 $<
-# 创建 iso 目录
-	mkdir -p $(BUILD)/iso/boot/grub
-# 拷贝内核文件
-	cp $< $(BUILD)/iso/boot
-# 拷贝 grub 配置文件
-	cp $(SRC)/utils/grub.cfg $(BUILD)/iso/boot/grub
-# 生成 iso 文件
-	grub-mkrescue -o $@ $(BUILD)/iso
+IMAGES:=$(BUILD)/master.img $(BUILD)/slave.img
 
-image:$(BUILD)/master.img
+image: $(IMAGES)
 
 .PHONY: clean
 clean:
 	rm -rf $(BUILD)
 
 .PHONY: bochs
-bochs: $(BUILD)/master.img
+bochs: $(IMAGES)
 	bochs -q -f ../bochs/bochsrc
 
 .PHONY: bochsg
-bochsg: $(BUILD)/master.img
+bochsg: $(IMAGES)
 	bochs-gdb -q -f ../bochs/bochsrc.gdb -unlock
 
-.PHONY: bochsb
-bochsb: $(BUILD)/kernel.iso
-	bochs -q -f ../bochs/bochsrc.grub -unlock
+QEMU:= qemu-system-i386 # 虚拟机
+QEMU+= -m 32M # 内存
+QEMU+= -audiodev pa,id=snd # 音频设备
+QEMU+= -machine pcspk-audiodev=snd # pcspeaker 设备
+QEMU+= -rtc base=localtime # 设备本地时间
+QEMU+= -drive file=$(BUILD)/master.img,if=ide,index=0,media=disk,format=raw # 主硬盘
+QEMU+= -drive file=$(BUILD)/slave.img,if=ide,index=1,media=disk,format=raw # 从硬盘
 
-QEMU:=qemu-system-i386 \
-	-m 32M \
-	-audiodev pa,id=hda \
-	-machine pcspk-audiodev=hda \
-	-rtc base=localtime
-
-QEMU_DISK:=-boot c \
-	-drive file=$(BUILD)/master.img,if=ide,index=0,media=disk,format=raw \
-
-QEMU_CDROM:=-boot d \
-	-drive file=$(BUILD)/kernel.iso,media=cdrom \
+QEMU_DISK_BOOT:=-boot c
 
 QEMU_DEBUG:= -s -S
 
 
 .PHONY: qemu
-qemu: $(BUILD)/master.img
+qemu: $(IMAGES)
 	$(QEMU) $(QEMU_DISK)
 	
 
 .PHONY: qemug
-qemug: $(BUILD)/master.img
+qemug: $(IMAGES)
 	$(QEMU) $(QEMU_DISK) $(QEMU_DEBUG) 
-
-.PHONY: qemub
-qemub: $(BUILD)/kernel.iso
-	$(QEMU) $(QEMU_CDROM) \
-	# $(QEMU_DEBUG)
 
 
 $(BUILD)/master.vmdk:$(BUILD)/master.img

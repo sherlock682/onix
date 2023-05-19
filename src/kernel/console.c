@@ -3,6 +3,7 @@
 #include <onix/io.h>
 #include <onix/string.h>
 #include <onix/interrupt.h>
+#include <onix/device.h>
 
 #define CRT_ADDR_REG 0x3D4
 #define CRT_DATA_REG 0x3D5
@@ -157,7 +158,7 @@ static void command_del()
 
 extern void start_beep();
 
-int32 console_write(char *buf, u32 count)
+int32 console_write(void *dev,char *buf, u32 count)
 {
     bool intr = interrupt_disable();//禁止中断
 
@@ -220,4 +221,9 @@ int32 console_write(char *buf, u32 count)
 void console_init()
 {
     console_clear();
+
+    device_install(
+        DEV_CHAR, DEV_CONSOLE,
+        NULL, "console", 0,
+        NULL, NULL, console_write);
 }

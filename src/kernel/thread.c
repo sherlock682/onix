@@ -4,6 +4,7 @@
 #include <onix/task.h>
 #include <onix/stdio.h>
 #include <onix/arena.h>
+#include <onix/stdlib.h>
 
 #define LOGK(fmt, args...) DEBUGK(fmt, ##args)
 
@@ -22,28 +23,34 @@ void idle_thread()
 
 static void real_init_thread()
 {
-    u32 counter = 0;
 
-    char ch;
+    int status;
     while (true)
     {
         // test();
-        char *ptr = (char *)0x900000;
-        brk(ptr);
+        // printf("init thread %d %d %d...\n", getpid(), getppid(), counter++);
+        // pid_t pid = fork();
 
-        ptr -= 0x1000;
-        ptr[3] = 0xff;
-
-        brk((char *)0x800000);
-
-        sleep(10000);
+        // if(pid)
+        // {
+        //     printf("fork after parent %d %d %d\n", pid, getpid(), getppid());
+        //     // sleep(1000);
+        //     pid_t child = waitpid(pid, &status);
+        //     printf("wait pid %d status %d %d\n", child, status, time());
+        // }
+        // else
+        // {
+        //     printf("fork after child %d %d %d\n", pid, getpid(), getppid());
+        //     // sleep(1000);
+        //     exit(0);
+        // }
+        sleep(1000);
         // printf("task is in user mode %d\n", counter++);
     }
 }
 
 void init_thread()
 {
-    // set_interrupt_state(true);
     char temp[100];
     task_to_user_mode(real_init_thread);
 }
@@ -51,12 +58,11 @@ void init_thread()
 void test_thread()
 {
     set_interrupt_state(true);
-    u32 counters = 0;
+    u32 counter = 0;
 
     while(true)
     {
-        LOGK("tesk task %d....\n", counters++);
-        BMB;
-        sleep(2000);
+        test();
+        // sleep(2000);
     }
 }

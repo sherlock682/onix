@@ -36,11 +36,28 @@ static task_t *get_free_task()
     {
         if (task_table[i] == NULL)
         {
-            task_table[i] = (task_t *)alloc_kpage(1);//todo free_kpage
-            return task_table[i];
+            task_t *task= (task_t *)alloc_kpage(1);
+            memset(task, 0, PAGE_SIZE);
+            task->pid = i;
+            task_table[i] = task;
+            return task;
         }
     }
     panic("No more tasks");
+}
+
+//获得进程id
+pid_t sys_getpid()
+{
+    task_t *task = running_task();
+    return task->pid;
+}
+
+// 获得父进程id
+pid_t sys_getppid()
+{
+    task_t *task = running_task();
+    return task->ppid;
 }
 
 // 从任务数组中查找某种状态的任务，自己除外
@@ -231,7 +248,6 @@ void schedule()
 static task_t *task_create(target_t target, const char *name, u32 priority, u32 uid)
 {
     task_t *task = get_free_task();
-    memset(task, 0, PAGE_SIZE);
 
     u32 stack  = (u32)task + PAGE_SIZE;
 
@@ -300,6 +316,150 @@ void task_to_user_mode(target_t *target)
     asm volatile(
         "movl %0, %%esp\n"
         "jmp interrupt_exit\n" ::"m"(iframe));
+}
+
+extern void interrupt_exit();
+
+static void task_build_stack(task_t *task)
+{
+    u32 addr = (u32)task + PAGE_SIZE;
+    addr -= sizeof(intr_frame_t);
+    intr_frame_t *iframe = (intr_frame_t *)addr;
+    iframe->eax = 0;
+
+    addr -= sizeof(task_frame_t);
+    task_frame_t *frame = (task_frame_t *)addr;
+
+    frame->ebp = 0xaa55aa55;
+    frame->ebx = 0xaa55aa55;
+    frame->edi = 0xaa55aa55;
+    frame->esi = 0xaa55aa55;
+
+    frame->eip = interrupt_exit;
+
+    task->stack = (u32 *)frame;
+}
+
+pid_t task_fork()
+{
+    // LOGK("fork is called\n");
+    task_t *task = running_task();
+
+    // 当前进程没有阻塞，且正在执行
+    assert(task->node.next == NULL && task->node.prev == NULL && task->state == TASK_RUNNING);
+
+    // 拷贝内核栈 和 PCB
+    task_t *child = get_free_task();
+    pid_t pid = child->pid;
+    memcpy(child, task, PAGE_SIZE);
+
+    child->pid = pid;
+    child->ppid = task->pid;
+
+    child->ticks = child->priority;
+    child->state = TASK_READY;
+
+    // 拷贝用户进程虚拟内存位图
+    child->vmap = kmalloc(sizeof(bitmap_t));
+    memcpy(child->vmap, task->vmap, sizeof(bitmap_t));
+
+    // 拷贝虚拟位图缓存
+    void *buf = (void *)alloc_kpage(1);
+    memcpy(buf, task->vmap->bits, PAGE_SIZE);
+    child->vmap->bits = buf;
+
+    // 拷贝页目录
+    child->pde = (u32)copy_pde();
+
+    // 构造 child 内核栈
+    task_build_stack(child); // ROP
+    // schedule();
+
+    return child->pid;
+}
+
+void task_exit(int status)
+{
+    task_t *task = running_task();
+
+    // 当前进程没有阻塞，且正在执行
+    assert(task->node.next == NULL && task->node.prev == NULL && task->state == TASK_RUNNING);
+
+    task->state = TASK_DIED;
+    task->status = status;
+
+    free_pde();
+
+    free_kpage((u32)task->vmap->bits, 1);
+    kfree(task->vmap);
+
+    // 将子进程的父进程赋值为自己的父进程
+    for (size_t i = 2; i < NR_TASK; i++)
+    {
+        task_t *child = task_table[i];
+        if (!child)
+            continue;
+        if (child->ppid != task->pid)
+            continue;
+        child->ppid = task->ppid;
+    }
+    LOGK("task 0x%p exit....\n", task);
+
+    task_t *parent = task_table[task->ppid];
+    if (parent->state == TASK_WAITING &&
+        (parent->waitpid == -1 || parent->waitpid == task->pid))
+    {
+        task_unblock(parent);
+    }
+
+    schedule();
+}
+
+pid_t task_waitpid(pid_t pid, int32 *status)
+{
+    task_t *task = running_task();
+    task_t *child = NULL;
+
+    while (true)
+    {
+        bool has_child = false;
+        for (size_t i = 2; i < NR_TASK; i++)
+        {
+            task_t *ptr = task_table[i];
+            if (!ptr)
+                continue;
+
+            if (ptr->ppid != task->pid)
+                continue;
+            if (pid != ptr->pid && pid != -1)
+                continue;
+
+            if (ptr->state == TASK_DIED)
+            {
+                child = ptr;
+                task_table[i] = NULL;
+                goto rollback;
+            }
+
+            has_child = true;
+        }
+        if (has_child)
+        {
+            task->waitpid = pid;
+            task_block(task, NULL, TASK_WAITING);
+            continue;
+        }
+        break;
+    }
+
+    // 没找到符合条件的子进程
+    return -1;
+
+rollback:
+    *status = child->status;
+    u32 ret = child->pid;
+    free_kpage((u32)child, 1);
+    return ret;
 }
 
 static void task_setup()
