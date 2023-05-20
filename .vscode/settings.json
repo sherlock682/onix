@@ -30,7 +30,11 @@
         "syscall.h": "c",
         "list.h": "c",
         "bitmap.h": "c",
-        "ide.h": "c"
+        "ide.h": "c",
+        "fs.h": "c",
+        "device.h": "c",
+        "buffer.h": "c",
+        "arena.h": "c"
     },
     "C_Cpp.errorSquiggles": "disabled"
 }

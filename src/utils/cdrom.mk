@@ -1,5 +1,6 @@
 
 $(BUILD)/kernel.iso : $(BUILD)/kernel.bin $(SRC)/utils/grub.cfg
+
 # 检测内核文件是否合法
 	grub-file --is-x86-multiboot2 $<
 # 创建 iso 目录
@@ -15,15 +16,15 @@ $(BUILD)/kernel.iso : $(BUILD)/kernel.bin $(SRC)/utils/grub.cfg
 bochsb: $(BUILD)/kernel.iso
 	bochs -q -f ../bochs/bochsrc.grub -unlock
 
-QEMU += -drive file=$(BUILD)/kernel.iso,media=cdrom
+QEMU_CDROM := -drive file=$(BUILD)/kernel.iso,media=cdrom # 光盘镜像
 
-QEMU_CDROM:=-boot d
+QEMU_CDROM_BOOT:= -boot d
 
 .PHONY: qemub
 qemub: $(BUILD)/kernel.iso $(IMAGES)
-	$(QEMU) $(QEMU_CDROM) \
+	$(QEMU) $(QEMU_CDROM) $(QEMU_CDROM_BOOT) \
 	# $(QEMU_DEBUG)
 
-.PHONY: cdrom
+.PHONY:cdrom
 cdrom: $(BUILD)/kernel.iso $(IMAGES)
 	-
