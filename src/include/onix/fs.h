@@ -13,7 +13,7 @@
 #define IMAP_NR 8 // inode 位图块，最大值
 #define ZMAP_NR 8 // 块位图块，最大值
 
-#define BLOCK_BITS (BLOCK_SIZE * 8) // 块位图大小
+#define BLOCK_BITS (BLOCK_SIZE * 8)                      // 块位图大小
 #define BLOCK_INODES (BLOCK_SIZE / sizeof(inode_desc_t)) // 块 inode 数量
 #define BLOCK_DENTRIES (BLOCK_SIZE / sizeof(dentry_t))   // 块 dentry 数量
 #define BLOCK_INDEXES (BLOCK_SIZE / sizeof(u16))         // 块索引数量
@@ -26,6 +26,20 @@
 #define SEPARATOR1 '/'                                       // 目录分隔符 1
 #define SEPARATOR2 '\\'                                      // 目录分隔符 2
 #define IS_SEPARATOR(c) (c == SEPARATOR1 || c == SEPARATOR2) // 字符是否位目录分隔符
+
+enum file_flag
+{
+    O_RDONLY = 00,      // 只读方式
+    O_WRONLY = 01,      // 只写方式
+    O_RDWR = 02,        // 读写方式
+    O_ACCMODE = 03,     // 文件访问模式屏蔽码
+    O_CREAT = 00100,    // 如果文件不存在就创建
+    O_EXCL = 00200,     // 独占使用文件标志
+    O_NOCTTY = 00400,   // 不分配控制终端
+    O_TRUNC = 01000,    // 若文件已存在且是写操作，则长度截为 0
+    O_APPEND = 02000,   // 以添加方式打开，文件指针置为文件尾
+    O_NONBLOCK = 04000, // 非阻塞方式打开和操作文件
+};
 
 typedef struct inode_desc_t
 {
@@ -83,6 +97,24 @@ typedef struct dentry_t
     char name[NAME_LEN]; // 文件名
 } dentry_t;
 
+typedef struct file_t
+{
+    inode_t *inode; // 文件 inode
+    u32 count;      // 引用计数
+    off_t offset;   // 文件偏移
+    int flags;      // 文件标记
+    int mode;       // 文件模式
+} file_t;
+
+typedef dentry_t dirent_t;
+
+typedef enum whence_t
+{
+    SEEK_SET = 1, // 直接设置偏移
+    SEEK_CUR,     // 当前位置偏移
+    SEEK_END      // 结束位置偏移
+} whence_t;
+
 super_block_t *get_super(dev_t dev);  // 获得 dev 对应的超级块
 super_block_t *read_super(dev_t dev); // 读取 dev 对应的超级块
 
@@ -98,9 +130,13 @@ idx_t bmap(inode_t *inode, idx_t block, bool create);
 inode_t *get_root_inode();               // 获取根目录 inode
 inode_t *iget(dev_t dev, idx_t nr);      // 获得设备 dev 的 nr inode
 void iput(inode_t *inode);               // 释放 inode
+inode_t *new_inode(dev_t dev, idx_t nr); // 创建新 inode
 
 inode_t *named(char *pathname, char **next); // 获取 pathname 对应的父目录 inode
 inode_t *namei(char *pathname);              // 获取 pathname 对应的 inode
+
+// 打开文件，返回 inode
+inode_t *inode_open(char *pathname, int flag, int mode);
 
 // 从 inode 的 offset 处，读 len 个字节到 buf
 int inode_read(inode_t *inode, char *buf, u32 len, off_t offset);
@@ -110,5 +146,8 @@ int inode_write(inode_t *inode, char *buf, u32 len, off_t offset);
 
 // 释放 inode 所有文件块
 void inode_truncate(inode_t *inode);
+
+// 格式化文件系统
+int devmkfs(dev_t dev, u32 icount);
 
 #endif

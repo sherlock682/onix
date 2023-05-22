@@ -8,6 +8,7 @@
 #define NORMAL_USER 1000
 
 #define TASK_NAME_LEN 16
+#define TASK_FILE_NR 16 // 进程文件数量
 
 typedef void target_t();
 
@@ -40,9 +41,11 @@ typedef struct task_t
     u32 brk;                            //进程堆内存最高地址
     int status;                         //进程特殊状态
     pid_t waitpid;                      // 进程等待的 pid
+    char *pwd;                          // 进程当前目录
     struct inode_t *ipwd;               // 进程当前目录 inode program work directory
     struct inode_t *iroot;              // 进程根目录 inode
     u16 umask;                          // 进程用户权限
+    struct file_t *files[TASK_FILE_NR]; // 进程文件表
     u32 magic;                          // 内核魔数，用于检测栈溢出
 } task_t;
 
@@ -105,5 +108,8 @@ void task_to_user_mode(target_t *target);
 
 pid_t sys_getpid();
 pid_t sys_getppid();
+
+fd_t task_get_fd(task_t *task);
+void task_put_fd(task_t *task, fd_t fd);
 
 #endif

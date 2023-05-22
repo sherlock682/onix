@@ -7,6 +7,8 @@
 #include <onix/arena.h>
 #include <onix/string.h>
 #include <onix/stdlib.h>
+#include <onix/stat.h>
+#include <onix/task.h>
 
 #define LOGK(fmt, args...) DEBUGK(fmt, ##args)
 
@@ -67,6 +69,19 @@ static inode_t *find_inode(dev_t dev, idx_t nr)
     return NULL;
 }
 
+static inode_t *fit_inode(inode_t *inode)
+{
+    if (!inode->mount)
+        return inode;
+
+    super_block_t *sb = get_super(inode->mount);
+    assert(sb);
+    iput(inode);
+    inode = sb->iroot;
+    inode->count++;
+    return inode;
+}
+
 // 获得设备 dev 的 nr inode
 inode_t *iget(dev_t dev, idx_t nr)
 {
@@ -75,7 +90,7 @@ inode_t *iget(dev_t dev, idx_t nr)
     {
         inode->count++;
         inode->atime = time();
-        return inode;
+        return fit_inode(inode);
     }
 
     super_block_t *sb = get_super(dev);
@@ -101,6 +116,24 @@ inode_t *iget(dev_t dev, idx_t nr)
 
     inode->ctime = inode->desc->mtime;
     inode->atime = time();
+
+    return inode;
+}
+
+inode_t *new_inode(dev_t dev, idx_t nr)
+{
+    task_t *task = running_task();
+    inode_t *inode = iget(dev, nr);
+    // assert(inode->desc->nlinks == 0);
+
+    inode->buf->dirty = true;
+
+    inode->desc->mode = 0777 & (~task->umask);
+    inode->desc->uid = task->uid;
+    inode->desc->size = 0;
+    inode->desc->mtime = inode->atime = time();
+    inode->desc->gid = task->gid;
+    inode->desc->nlinks = 1;
 
     return inode;
 }
@@ -258,4 +291,55 @@ int inode_write(inode_t *inode, char *buf, u32 len, off_t offset)
 
     // 返回写入大小
     return offset - begin;
+}
+
+static void inode_bfree(inode_t *inode, u16 *array, int index, int level)
+{
+    if (!array[index])
+    {
+        return;
+    }
+
+    if (!level)
+    {
+        bfree(inode->dev, array[index]);
+        return;
+    }
+
+    buffer_t *buf = bread(inode->dev, array[index]);
+    for (size_t i = 0; i < BLOCK_INDEXES; i++)
+    {
+        inode_bfree(inode, (u16 *)buf->data, i, level - 1);
+    }
+    brelse(buf);
+    bfree(inode->dev, array[index]);
+}
+
+// 释放 inode 所有文件块
+void inode_truncate(inode_t *inode)
+{
+    if (!ISFILE(inode->desc->mode) && !ISDIR(inode->desc->mode))
+    {
+        return;
+    }
+
+    // 释放直接块
+    for (size_t i = 0; i < DIRECT_BLOCK; i++)
+    {
+        inode_bfree(inode, inode->desc->zone, i, 0);
+        inode->desc->zone[i] = 0;
+    }
+
+    // 释放一级间接块
+    inode_bfree(inode, inode->desc->zone, DIRECT_BLOCK, 1);
+    inode->desc->zone[DIRECT_BLOCK] = 0;
+
+    // 释放二级间接块
+    inode_bfree(inode, inode->desc->zone, DIRECT_BLOCK + 1, 2);
+    inode->desc->zone[DIRECT_BLOCK + 1] = 0;
+
+    inode->desc->size = 0;
+    inode->buf->dirty = true;
+    inode->desc->mtime = time();
+    bwrite(inode->buf);
 }

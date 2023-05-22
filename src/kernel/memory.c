@@ -7,6 +7,8 @@
 #include <onix/bitmap.h>
 #include <onix/multiboot2.h>
 #include <onix/task.h>
+#include <onix/syscall.h>
+#include <onix/fs.h>
 
 #define LOGK(fmt, args...) DEBUGK(fmt, ##args)
 // #define LOGK(fmt, args...)
@@ -306,6 +308,12 @@ static page_entry_t *get_pte(u32 vaddr,bool create)
     return table;
 }
 
+page_entry_t *get_entry(u32 vaddr, bool create)
+{
+    page_entry_t *pte = get_pte(vaddr, create);
+    return &pte[TIDX(vaddr)];
+}
+
 void flush_tlb(u32 vaddr)
 {
     asm volatile("invlpg (%0)" ::"r"(vaddr)
@@ -365,21 +373,15 @@ void link_page(u32 vaddr)
 {
     ASSERT_PAGE(vaddr);
 
-    page_entry_t *pte = get_pte(vaddr, true);
-    page_entry_t *entry = &pte[TIDX(vaddr)];
+    page_entry_t *entry = get_entry(vaddr, true);
 
-    task_t *task = running_task();
-    bitmap_t *map = task->vmap;
     u32 index = IDX(vaddr);
 
     // 如果页面已存在，则直接返回
     if (entry->present)
     {
-        assert(bitmap_test(map, index));
         return;
     }
-    assert(!bitmap_test(map, index));
-    bitmap_set(map, index, true);
 
     u32 paddr = get_page();
     entry_init(entry, IDX(paddr));
@@ -393,22 +395,16 @@ void unlink_page(u32 vaddr)
 {
     ASSERT_PAGE(vaddr);
 
-    page_entry_t *pte = get_pte(vaddr, true);
-    page_entry_t *entry = &pte[TIDX(vaddr)];
-
-    task_t *task = running_task();
-    bitmap_t *map = task->vmap;
-    u32 index = IDX(vaddr);
-
+    page_entry_t *pde = get_pde();
+    page_entry_t *entry = &pde[DIDX(vaddr)];
     if (!entry->present)
-    {
-        assert(!bitmap_test(map, index));
         return;
-    }
-    assert(entry->present && bitmap_test(map, index));
+
+    entry = get_entry(vaddr, false);
+    if (!entry->present)
+        return;
 
     entry->present = false;
-    bitmap_set(map, index, false);
 
     u32 paddr = PAGE(entry->index);
 
@@ -421,12 +417,17 @@ void unlink_page(u32 vaddr)
 static u32 copy_page(void *page)
 {
     u32 paddr = get_page();
+    u32 vaddr = 0;
 
-    page_entry_t *entry = get_pte(0, false);
+    page_entry_t *entry = get_pte(vaddr, false);
     entry_init(entry, IDX(paddr));
-    memcpy((void *)0, (void *)page, PAGE_SIZE);
+    flush_tlb(vaddr);
+
+    memcpy((void *)vaddr, (void *)page, PAGE_SIZE);
 
     entry->present = false;
+    flush_tlb(vaddr);
+
     return paddr;
 }
 
@@ -461,8 +462,11 @@ page_entry_t *copy_pde()
             // 对应物理内存引用大于 0
             assert(memory_map[entry->index] > 0);
 
-            // 置为只读
-            entry->write = false;
+            // 若不是共享内存，则置为只读
+            if (!entry->shared)
+            {
+                entry->write = false;
+            }
 
             // 对应物理页引用加 1
             memory_map[entry->index]++;
@@ -548,6 +552,74 @@ int32 sys_brk(void *addr)
     return 0;
 }
 
+void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
+{
+    ASSERT_PAGE((u32)addr);
+
+    u32 count = div_round_up(length, PAGE_SIZE);
+    u32 vaddr = (u32)addr;
+
+    task_t *task = running_task();
+    if (!vaddr)
+    {
+        vaddr = scan_page(task->vmap, count);
+    }
+
+    assert(vaddr >= USER_MMAP_ADDR && vaddr < USER_STACK_BOTTOM);
+ 
+    for (size_t i = 0; i < count; i++)
+    {
+        u32 page = vaddr + PAGE_SIZE * i;
+        link_page(page);
+        bitmap_set(task->vmap, IDX(page), true);
+
+        page_entry_t *entry = get_entry(page, false);
+        entry->user = true;
+        entry->write = false;
+        if (prot & PROT_WRITE)
+        {
+            entry->write = true;
+        }
+        if (flags & MAP_SHARED)
+        {
+            entry->shared = true;
+        }
+        if (flags & MAP_PRIVATE)
+        {
+            entry->privat = true;
+        }
+        flush_tlb(page);
+    }
+
+    if (fd != EOF)
+    {
+        lseek(fd, offset, SEEK_SET);
+        read(fd, (char *)vaddr, length);
+    }
+
+    return (void *)vaddr;
+}
+
+int sys_munmap(void *addr, size_t length)
+{
+    task_t *task = running_task();
+    u32 vaddr = (u32)addr;
+    assert(vaddr >= USER_MMAP_ADDR && vaddr < USER_STACK_BOTTOM);
+
+    ASSERT_PAGE(vaddr);
+    u32 count = div_round_up(length, PAGE_SIZE);
+
+    for (size_t i = 0; i < count; i++)
+    {
+        u32 page = vaddr + PAGE_SIZE * i;
+        unlink_page(page);
+        assert(bitmap_test(task->vmap, IDX(page)));
+        bitmap_set(task->vmap, IDX(page), false);
+    }
+
+    return 0;
+}
+
 typedef struct page_error_code_t
 {
     u8 present : 1;
@@ -582,10 +654,11 @@ void page_fault(
     {
         assert(code->write);
 
-        page_entry_t *pte = get_pte(vaddr, false);
-        page_entry_t *entry = &pte[TIDX(vaddr)];
+        page_entry_t *entry = get_entry(vaddr, false);
 
         assert(entry->present);   // 目前写内存应该是存在的
+        assert(!entry->shared);
+        
         assert(memory_map[entry->index] > 0);
         if(memory_map[entry->index]==1)
         {

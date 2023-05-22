@@ -20,7 +20,7 @@ int printf(const char *fmt, ...)
 
     va_end(args);
 
-    write(stdout, buf, i);
+    write(STDOUT_FILENO, buf, i);
 
     return i;
 }

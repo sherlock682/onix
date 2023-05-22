@@ -34,7 +34,9 @@
         "fs.h": "c",
         "device.h": "c",
         "buffer.h": "c",
-        "arena.h": "c"
+        "arena.h": "c",
+        "ctime": "c",
+        "*.tcc": "c"
     },
     "C_Cpp.errorSquiggles": "disabled"
 }

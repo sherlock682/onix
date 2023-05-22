@@ -4,7 +4,7 @@
 #include <onix/task.h>
 #include <onix/stdio.h>
 #include <onix/arena.h>
-#include <onix/stdlib.h>
+#include <onix/fs.h>
 
 #define LOGK(fmt, args...) DEBUGK(fmt, ##args)
 
@@ -21,46 +21,41 @@ void idle_thread()
     }
 }
 
+extern void osh_main();
+
 static void real_init_thread()
 {
-
-    int status;
     while (true)
     {
-        // test();
-        // printf("init thread %d %d %d...\n", getpid(), getppid(), counter++);
-        // pid_t pid = fork();
-
-        // if(pid)
-        // {
-        //     printf("fork after parent %d %d %d\n", pid, getpid(), getppid());
-        //     // sleep(1000);
-        //     pid_t child = waitpid(pid, &status);
-        //     printf("wait pid %d status %d %d\n", child, status, time());
-        // }
-        // else
-        // {
-        //     printf("fork after child %d %d %d\n", pid, getpid(), getppid());
-        //     // sleep(1000);
-        //     exit(0);
-        // }
-        sleep(1000);
-        // printf("task is in user mode %d\n", counter++);
+        u32 status;
+        pid_t pid = fork();
+        if(pid)
+        {
+            pid_t child = waitpid(pid, &status);
+            printf("wait pid %d status %d %d\n", child, status, time());
+        }
+        else
+        {
+            osh_main();
+        }
     }
 }
+
+extern void dev_init();
 
 void init_thread()
 {
     char temp[100];
+    dev_init();
     task_to_user_mode(real_init_thread);
 }
 
 void test_thread()
 {
     set_interrupt_state(true);
-    test();
+    // test();
     while (true)
-    { 
+    {
         sleep(10);
     }
 }

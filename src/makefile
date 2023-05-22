@@ -29,6 +29,9 @@ $(BUILD)/%.o: $(SRC)/%.c
 	$(shell mkdir -p $(dir $@))
 	gcc $(CFLAGS) $(DEBUG) $(INCLUDE) -c $< -o $@
 
+$(BUILD)/builtin/%.out: $(BUILD)/builtin/%.o
+	ld -m elf_i386 -static $^ -o $@ -Ttext 0x1001000
+
 LDFLAGS:= -m elf_i386 \
 		-static \
 		-Ttext $(ENTRYPOINT)\
@@ -54,17 +57,22 @@ $(BUILD)/kernel.bin: \
 	$(BUILD)/kernel/clock.o \
 	$(BUILD)/kernel/time.o \
 	$(BUILD)/kernel/rtc.o \
+	$(BUILD)/kernel/ramdisk.o \
+	$(BUILD)/kernel/ide.o \
 	$(BUILD)/kernel/memory.o \
 	$(BUILD)/kernel/thread.o \
 	$(BUILD)/kernel/keyboard.o \
 	$(BUILD)/kernel/arena.o \
-	$(BUILD)/kernel/ide.o \
 	$(BUILD)/kernel/buffer.o \
 	$(BUILD)/kernel/system.o \
+	$(BUILD)/kernel/execve.o \
 	$(BUILD)/fs/super.o \
 	$(BUILD)/fs/bmap.o \
 	$(BUILD)/fs/inode.o \
 	$(BUILD)/fs/namei.o \
+	$(BUILD)/fs/file.o \
+	$(BUILD)/fs/stat.o \
+	$(BUILD)/fs/dev.o \
 	$(BUILD)/lib/bitmap.o \
 	$(BUILD)/lib/string.o \
 	$(BUILD)/lib/vsprintf.o \
@@ -73,6 +81,7 @@ $(BUILD)/kernel.bin: \
 	$(BUILD)/lib/list.o \
 	$(BUILD)/lib/fifo.o \
 	$(BUILD)/lib/printf.o \
+	$(BUILD)/builtin/osh.o \
 
 	$(shell mkdir -p $(dir $@))
 	ld ${LDFLAGS} $^ -o $@

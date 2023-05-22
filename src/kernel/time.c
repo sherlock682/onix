@@ -1,7 +1,6 @@
 #include <onix/time.h>
 #include <onix/debug.h>
 #include <onix/stdlib.h>
-#include <onix/io.h>
 #include <onix/rtc.h>
 
 #define LOGK(fmt, args...) DEBUGK(fmt, ##args)
@@ -24,6 +23,7 @@
 #define HOUR (60 * MINUTE) // 每小时的秒数
 #define DAY (24 * HOUR)    // 每天的秒数
 #define YEAR (365 * DAY)   // 每年的秒数，以 365 天算
+
 // 每个月开始时的已经过去天数
 static int month[13] = {
     0, // 这里占位，没有 0 月，从 1 月开始
@@ -42,6 +42,56 @@ static int month[13] = {
 
 time_t startup_time;
 int century;
+
+int elapsed_leap_years(int year)
+{
+    int result = 0;
+    result += (year - 1) / 4;
+    result -= (year - 1) / 100;
+    result += (year + 299) / 400;
+    result -= (1970 - 1900) / 4;
+    return result;
+}
+
+bool is_leap_year(int year)
+{
+    return ((year % 4 == 0) && (year % 100 != 0)) || ((year + 1900) % 400 == 0);
+}
+
+void localtime(time_t stamp, tm *time)
+{
+    time->tm_sec = stamp % 60;
+
+    time_t remain = stamp / 60;
+
+    time->tm_min = remain % 60;
+    remain /= 60;
+
+    time->tm_hour = remain % 24;
+    time_t days = remain / 24;
+
+    time->tm_wday = (days + 4) % 7; // 1970-01-01 是星期四
+
+    // 这里产生误差显然需要 365 个闰年，不管了
+    int years = days / 365 + 70;
+    time->tm_year = years;
+    int offset = 1;
+    if (is_leap_year(years))
+        offset = 0;
+
+    days -= elapsed_leap_years(years);
+    time->tm_yday = days % (366 - offset);
+
+    int mon = 1;
+    for (; mon < 13; mon++)
+    {
+        if ((month[mon] - offset) > time->tm_yday)
+            break;
+    }
+
+    time->tm_mon = mon - 1;
+    time->tm_mday = time->tm_yday - month[time->tm_mon] + offset + 1;
+}
 
 // 这里生成的时间可能和 UTC 时间有出入
 // 与系统具体时区相关，不过也不要紧，顶多差几个小时
@@ -104,7 +154,6 @@ int get_yday(tm *time)
     return res;
 }
 
-
 void time_read_bcd(tm *time)
 {
     // CMOS 的访问速度很慢。为了减小时间误差，在读取了下面循环中所有数值后，
@@ -151,5 +200,4 @@ void time_init()
          time.tm_hour,
          time.tm_min,
          time.tm_sec);
-    // hang();
 }

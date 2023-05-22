@@ -85,7 +85,7 @@ void fish_thread(int id)
 
 int main()
 {
-    setbuf(stdout, NULL);
+    setbuf(STDOUT_FILENO, NULL);
     for (int i = 0; i < strlen(roles); i++)
         create(fish_thread);
 }
