@@ -21,33 +21,13 @@ void idle_thread()
     }
 }
 
-extern void osh_main();
-
-static void real_init_thread()
-{
-    while (true)
-    {
-        u32 status;
-        pid_t pid = fork();
-        if(pid)
-        {
-            pid_t child = waitpid(pid, &status);
-            printf("wait pid %d status %d %d\n", child, status, time());
-        }
-        else
-        {
-            osh_main();
-        }
-    }
-}
-
 extern void dev_init();
 
 void init_thread()
 {
     char temp[100];
     dev_init();
-    task_to_user_mode(real_init_thread);
+    task_to_user_mode();
 }
 
 void test_thread()
