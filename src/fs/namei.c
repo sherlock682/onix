@@ -9,10 +9,6 @@
 
 #define LOGK(fmt, args...) DEBUGK(fmt, ##args)
 
-#define P_EXEC IXOTH
-#define P_READ IROTH
-#define P_WRITE IWOTH
-
 bool permission(inode_t *inode, u16 mask)
 {
     u16 mode = inode->desc->mode;
@@ -614,7 +610,7 @@ inode_t *inode_open(char *pathname, int flag, int mode)
     inode->desc->mode = mode;
 
 makeup:
-    if (!permission(inode, flag & O_ACCMODE))
+    if (!permission(inode, ACC_MODE(flag & O_ACCMODE)))
         goto rollback;
     if (ISDIR(inode->desc->mode) && (flag & O_ACCMODE) != O_RDONLY)
         goto rollback;

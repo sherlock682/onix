@@ -53,3 +53,5 @@ com1: enabled=false
 com2: enabled=false
 com3: enabled=false
 com4: enabled=false
+parport1: enabled=true, file=none
+parport2: enabled=false

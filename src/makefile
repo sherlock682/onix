@@ -11,25 +11,45 @@ CFLAGS+= -fno-pic				# 不需要位置无关的代码  position independent code
 CFLAGS+= -fno-pie				# 不需要位置无关的可执行程序 position independent executable
 CFLAGS+= -nostdlib				# 不需要标准库
 CFLAGS+= -fno-stack-protector	# 不需要栈保护
-
+CFLAGS+= -DONIX					# 定义 ONIX
 CFLAGS:=$(strip ${CFLAGS})
 
 DEBUG:= -g
-INCLUDE:= -I$(SRC)/include
+INCLUDE:=-I$(SRC)/include
 
 $(BUILD)/boot/%.bin: $(SRC)/boot/%.asm
 	$(shell mkdir -p $(dir $@))
 	nasm -f bin $< -o $@
 
-$(BUILD)/%.o: $(SRC)/%.asm 
+$(BUILD)/%.o: $(SRC)/%.asm
 	$(shell mkdir -p $(dir $@))
-	nasm -gdwarf -f elf32 $(DEBUG) $< -o $@
-	
+	nasm -f elf32 $(DEBUG) $< -o $@
+
 $(BUILD)/%.o: $(SRC)/%.c
 	$(shell mkdir -p $(dir $@))
 	gcc $(CFLAGS) $(DEBUG) $(INCLUDE) -c $< -o $@
 
-$(BUILD)/builtin/%.out: $(BUILD)/builtin/%.o
+$(BUILD)/lib/libc.o: $(BUILD)/lib/crt.o \
+	$(BUILD)/lib/crt1.o \
+	$(BUILD)/lib/string.o \
+	$(BUILD)/lib/vsprintf.o \
+	$(BUILD)/lib/stdlib.o \
+	$(BUILD)/lib/syscall.o \
+	$(BUILD)/lib/printf.o \
+	$(BUILD)/lib/assert.o \
+	$(BUILD)/lib/time.o \
+
+	ld -m elf_i386 -r $^ -o $@
+
+BUILTIN_APPS := \
+	$(BUILD)/builtin/env.out \
+	$(BUILD)/builtin/echo.out \
+	$(BUILD)/builtin/cat.out \
+	$(BUILD)/builtin/ls.out \
+
+$(BUILD)/builtin/%.out: $(BUILD)/builtin/%.o \
+	$(BUILD)/lib/libc.o \
+	
 	ld -m elf_i386 -static $^ -o $@ -Ttext 0x1001000
 
 LDFLAGS:= -m elf_i386 \
@@ -49,6 +69,7 @@ $(BUILD)/kernel.bin: \
 	$(BUILD)/kernel/debug.o \
 	$(BUILD)/kernel/global.o \
 	$(BUILD)/kernel/task.o \
+	$(BUILD)/kernel/thread.o \
 	$(BUILD)/kernel/mutex.o \
 	$(BUILD)/kernel/gate.o \
 	$(BUILD)/kernel/schedule.o \
@@ -59,10 +80,10 @@ $(BUILD)/kernel.bin: \
 	$(BUILD)/kernel/rtc.o \
 	$(BUILD)/kernel/ramdisk.o \
 	$(BUILD)/kernel/ide.o \
+	$(BUILD)/kernel/serial.o \
 	$(BUILD)/kernel/memory.o \
-	$(BUILD)/kernel/thread.o \
-	$(BUILD)/kernel/keyboard.o \
 	$(BUILD)/kernel/arena.o \
+	$(BUILD)/kernel/keyboard.o \
 	$(BUILD)/kernel/buffer.o \
 	$(BUILD)/kernel/system.o \
 	$(BUILD)/kernel/execve.o \
@@ -74,18 +95,18 @@ $(BUILD)/kernel.bin: \
 	$(BUILD)/fs/stat.o \
 	$(BUILD)/fs/dev.o \
 	$(BUILD)/lib/bitmap.o \
+	$(BUILD)/lib/list.o \
+	$(BUILD)/lib/fifo.o \
 	$(BUILD)/lib/string.o \
 	$(BUILD)/lib/vsprintf.o \
 	$(BUILD)/lib/stdlib.o \
 	$(BUILD)/lib/syscall.o \
-	$(BUILD)/lib/list.o \
-	$(BUILD)/lib/fifo.o \
 	$(BUILD)/lib/printf.o \
 	$(BUILD)/builtin/osh.o \
 
 	$(shell mkdir -p $(dir $@))
 	ld ${LDFLAGS} $^ -o $@
-
+ 
 $(BUILD)/system.bin: $(BUILD)/kernel.bin
 	objcopy -O binary $< $@
 

@@ -22,11 +22,17 @@ static char cmd[MAX_CMD_LEN];
 static char *args[MAX_ARG_NR];
 static char buf[BUFLEN];
 
+static char *envp[] = {
+    "HOME=/",
+    "PATH=/bin",
+    NULL,
+};
+
 static char *onix_logo[] = {
-    "                            ____       _     \n\t",
-    "                           / __ \\___  (_)_ __ \n\t",
-    "                          / /_/ / _ \\/ /\\ \\ / \n\t",
-    "                          \\____/_//_/_//_\\_\\  \n\t",
+    "                                ____       _      \n\0",
+    "                               / __ \\___  (_)_ __ \n\0",
+    "                              / /_/ / _ \\/ /\\ \\ / \n\0",
+    "                              \\____/_//_/_//_\\_\\  \n\0",
 };
 
 extern char *strsep(const char *str);
@@ -55,7 +61,6 @@ void print_prompt()
     printf("[root %s]# ", base);
 }
 
-
 void builtin_logo()
 {
     clear();
@@ -67,32 +72,11 @@ void builtin_logo()
 
 void builtin_test(int argc, char *argv[])
 {
-    // test();
-    // mkfs("/dev/hdb1", 0);
-
-    u32 status;
-
-    int *counter = (int *)mmap(0, sizeof(int), PROT_WRITE, MAP_SHARED, EOF, 0);
-    pid_t pid = fork();
-
-    if (pid)
-    {
-        // pid_t child = waitpid(pid, &status);
-        // printf("wait pid %d status %d %d\n", child, status, time());
-        while (true)
-        {
-            (*counter)++;
-            sleep(300);
-        }
-    }
-    else
-    {
-        while (true)
-        {
-            printf("counter %d\n", *counter);
-            sleep(100);
-        }
-    }
+    printf("osh test starting...\n");
+    // while (true)
+    // {
+    //     test();
+    // }
 }
 
 void builtin_pwd()
@@ -119,132 +103,9 @@ static void strftime(time_t stamp, char *buf)
             time.tm_sec);
 }
 
-static void parsemode(int mode,char*buf)
-{
-    memset(buf, '-', 10);
-    buf[10] = '\0';
-    char *ptr = buf;
-
-    switch (mode & IFMT)
-    {
-    case IFREG:
-        *ptr = '-';
-        break;
-    case IFBLK:
-        *ptr = 'b';
-        break;
-    case IFDIR:
-        *ptr = 'd';
-        break;
-    case IFCHR:
-        *ptr = 'c';
-        break;
-    case IFIFO:
-        *ptr = 'p';
-        break;
-    case IFLNK:
-        *ptr = 'l';
-        break;
-    case IFSOCK:
-        *ptr = 's';
-        break;
-    default:
-        *ptr = '?';
-        break;
-    }
-    ptr++;
-    for (int i = 6; i >= 0;i-=3)
-    {
-        int fmt = (mode >> i) & 07;
-        if (fmt & 0b100)
-        {
-            *ptr = 'r';
-        }
-        ptr++;
-        if (fmt & 0x010)
-        {
-            *ptr = 'w';
-        }
-        ptr++;
-        if (fmt & 0x001)
-        {
-            *ptr = 'x';
-        }
-        ptr++;
-    }
-}
-
-void builtin_ls(int argc,char*argv[])
-{
-    fd_t fd = open(cwd, O_RDONLY, 0);
-    if(fd==EOF)
-        return;
-    bool list = false;
-    if (argc == 2 && !strcmp(argv[1], "-l"))
-        list = true;
-
-    lseek(fd, 0, SEEK_SET);
-    dentry_t entry;
-    while(true)
-    {
-        int len = readdir(fd, &entry, 1);
-        if(len==EOF)
-            break;
-        if(!entry.nr)
-            continue;
-        if (!strcmp(entry.name, ".") || !strcmp(entry.name, ".."))
-        {
-            continue;
-        }
-        if(!list)
-        {
-            printf("%s ", entry.name);
-            continue;
-        }
-        stat_t statbuf;
-
-        stat(entry.name, &statbuf);
-
-        parsemode(statbuf.mode, buf);
-        printf("%s ", buf);
-
-        strftime(statbuf.ctime, buf);
-        printf("% 2d % 2d % 2d % 2d %s %s\n",
-               statbuf.nlinks, 
-               statbuf.uid, 
-               statbuf.gid, 
-               statbuf.size,
-               buf, 
-               entry.name);
-    }
-    if(!list)
-        printf("\n");
-    close(fd);
-}
-
 void builtin_cd(int argc, char *argv[])
 {
     chdir(argv[1]);
-}
-
-void builtin_cat(int ardc, char *argv[])
-{
-    fd_t fd = open(argv[1], O_RDONLY, 0);
-    if (fd == EOF)
-    {
-        printf("file %s not exists.\n", argv[1]);
-        return;
-    }
-    while(true)
-    {
-        int len = read(fd, buf, BUFLEN);
-        if(len == EOF)
-        {
-            break;
-        }
-        write(STDOUT_FILENO, buf, len);
-    }
-    close(fd);
 }
 
 void builtin_mkdir(int argc, char *argv[])
@@ -307,6 +168,162 @@ void builtin_mkfs(int argc, char *argv[])
     mkfs(argv[1], 0);
 }
 
+static void dupfile(int argc, char **argv, fd_t dupfd[3])
+{
+    for (size_t i = 0; i < 3; i++)
+    {
+        dupfd[i] = EOF;
+    }
+
+    int outappend = 0;
+    int errappend = 0;
+
+    char *infile = NULL;
+    char *outfile = NULL;
+    char *errfile = NULL;
+
+    for (size_t i = 0; i < argc; i++)
+    {
+        if (!strcmp(argv[i], "<") && (i + 1) < argc)
+        {
+            infile = argv[i + 1];
+            argv[i] = NULL;
+            i++;
+            continue;
+        }
+        if (!strcmp(argv[i], ">") && (i + 1) < argc)
+        {
+            outfile = argv[i + 1];
+            argv[i] = NULL;
+            i++;
+            continue;
+        }
+        if (!strcmp(argv[i], ">>") && (i + 1) < argc)
+        {
+            outfile = argv[i + 1];
+            argv[i] = NULL;
+            outappend = O_APPEND;
+            i++;
+            continue;
+        }
+        if (!strcmp(argv[i], "2>") && (i + 1) < argc)
+        {
+            errfile = argv[i + 1];
+            argv[i] = NULL;
+            i++;
+            continue;
+        }
+        if (!strcmp(argv[i], "2>>") && (i + 1) < argc)
+        {
+            errfile = argv[i + 1];
+            argv[i] = NULL;
+            errappend = O_APPEND;
+            i++;
+            continue;
+        }
+    }
+
+    if (infile != NULL)
+    {
+        fd_t fd = open(infile, O_RDONLY | outappend | O_CREAT, 0755);
+        if (fd == EOF)
+        {
+            printf("open file %s failure\n", infile);
+            goto rollback;
+        }
+        dupfd[0] = fd;
+    }
+    if (outfile != NULL)
+    {
+        fd_t fd = open(outfile, O_WRONLY | outappend | O_CREAT, 0755);
+        if (fd == EOF)
+        {
+            printf("open file %s failure\n", outfile);
+            goto rollback;
+        }
+        dupfd[1] = fd;
+    }
+    if (errfile != NULL)
+    {
+        fd_t fd = open(errfile, O_WRONLY | errappend | O_CREAT, 0755);
+        if (fd == EOF)
+        {
+            printf("open file %s failure\n", errfile);
+            goto rollback;
+        }
+        dupfd[2] = fd;
+    }
+    return;
+
+rollback:
+    for (size_t i = 0; i < 3; i++)
+    {
+        if (dupfd[i] != EOF)
+        {
+            close(dupfd[i]);
+        }
+    }
+}
+
+pid_t builtin_command(char *filename, char *argv[], fd_t infd, fd_t outfd, fd_t errfd)
+{
+    int status;
+
+    pid_t pid = fork();
+    if (pid)
+    {
+        if (infd != EOF)
+        {
+            close(infd);
+        }
+        if (outfd != EOF)
+        {
+            close(outfd);
+        }
+        if (errfd != EOF)
+        {
+            close(errfd);
+        }
+        return pid;
+    }
+    if (infd != EOF)
+    {
+        fd_t fd = dup2(infd, STDIN_FILENO);
+        close(infd);
+    }
+    if (outfd != EOF)
+    {
+        fd_t fd = dup2(outfd, STDOUT_FILENO);
+        close(outfd);
+    }
+    if (errfd != EOF)
+    {
+        fd_t fd = dup2(errfd, STDERR_FILENO);
+        close(errfd);
+    }
+
+    int i = execve(filename, argv, envp);
+    exit(i);
+}
+
+void builtin_exec(int argc, char *argv[])
+{
+    stat_t statbuf;
+    sprintf(buf, "/bin/%s.out", argv[0]);
+    if (stat(buf, &statbuf) == EOF)
+    {
+        printf("osh: command not found: %s\n", argv[0]);
+        return;
+    }
+
+    int status;
+    fd_t dupfd[3];
+    dupfile(argc, argv, dupfd);
+
+    pid_t pid = builtin_command(buf, &argv[1], dupfd[0], dupfd[1], dupfd[2]);
+    waitpid(pid, &status);
+}
+
 static void execute(int argc, char *argv[])
 {
     char *line = argv[0];
@@ -335,17 +352,9 @@ static void execute(int argc, char *argv[])
         }
         exit(code);
     }
-    if (!strcmp(line, "ls"))
-    {
-        return builtin_ls(argc, argv);
-    }
     if (!strcmp(line, "cd"))
     {
         return builtin_cd(argc, argv);
-    }
-    if (!strcmp(line, "cat"))
-    {
-        return builtin_cat(argc, argv);
     }
     if (!strcmp(line, "mkdir"))
     {
@@ -375,7 +384,7 @@ static void execute(int argc, char *argv[])
     {
         return builtin_mkfs(argc, argv);
     }
-    printf("osh: command not found: %s\n", argv[0]);
+    return builtin_exec(argc, argv);
 }
 
 void readline(char *buf, u32 count)
@@ -397,8 +406,8 @@ void readline(char *buf, u32 count)
         {
         case '\n':
         case '\r':
-            ch = *ptr;
             *ptr = 0;
+            ch = '\n';
             write(STDOUT_FILENO, &ch, 1);
             return;
         case '\b':
@@ -420,7 +429,7 @@ void readline(char *buf, u32 count)
     buf[idx] = '\0';
 }
 
-static int cmd_parse(char *cmd, char *argv[],char token)
+static int cmd_parse(char *cmd, char *argv[], char token)
 {
     assert(cmd != NULL);
 
@@ -441,22 +450,20 @@ static int cmd_parse(char *cmd, char *argv[],char token)
         {
             next++;
         }
-
         if (*next)
         {
             *next = 0;
             next++;
         }
     }
-
     argv[argc] = NULL;
     return argc;
 }
 
 int osh_main()
 {
-    execve("/hello.out", NULL, NULL);
-    
+    // builtin_test(0, NULL);
+
     memset(cmd, 0, sizeof(cmd));
     memset(cwd, 0, sizeof(cwd));
 
@@ -470,7 +477,7 @@ int osh_main()
         {
             continue;
         }
-        int argc = cmd_parse(cmd, args,' ');
+        int argc = cmd_parse(cmd, args, ' ');
         if (argc < 0 || argc >= MAX_ARG_NR)
         {
             continue;

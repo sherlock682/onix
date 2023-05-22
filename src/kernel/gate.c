@@ -32,12 +32,32 @@ static void sys_default()
 
 static u32 sys_test()
 {
-    LOGK("sys_test called!!!\n");
+    char ch;
+    device_t *device;
+
+    device_t *serial = device_find(DEV_SERIAL, 0);
+    assert(serial);
+
+    device_t *keyboard = device_find(DEV_KEYBOARD, 0);
+    assert(keyboard);
+
+    device_t *console = device_find(DEV_CONSOLE, 0);
+    assert(console);
+
+    device_read(serial->dev, &ch, 1, 0, 0);
+    // device_read(keyboard->dev, &ch, 1, 0, 0);
+
+    device_write(serial->dev, &ch, 1, 0, 0);
+    device_write(console->dev, &ch, 1, 0, 0);
+    
     return 255;
 }
 extern int sys_mknod();
 
 extern void sys_execve();
+
+extern fd_t sys_dup();
+extern fd_t sys_dup2();
 
 extern int sys_read();
 extern int sys_write();
@@ -99,6 +119,9 @@ void syscall_init()
     syscall_table[SYS_NR_BRK] = sys_brk;
     syscall_table[SYS_NR_MMAP] = sys_mmap;
     syscall_table[SYS_NR_MUNMAP] = sys_munmap;
+
+    syscall_table[SYS_NR_DUP] = sys_dup;
+    syscall_table[SYS_NR_DUP2] = sys_dup2;
 
     syscall_table[SYS_NR_READ] = sys_read;
     syscall_table[SYS_NR_WRITE] = sys_write;

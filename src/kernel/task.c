@@ -11,11 +11,10 @@
 #include <onix/global.h>
 #include <onix/arena.h>
 #include <onix/fs.h>
-#include <onix/device.h>
 
 #define LOGK(fmt, args...) DEBUGK(fmt, ##args)
 
-#define NR_TASK 64
+#define NR_TASKS 64
 
 extern u32 volatile jiffies;
 extern u32 jiffy;
@@ -25,21 +24,20 @@ extern file_t file_table[];
 
 extern void task_switch(task_t *next);
 
-static task_t *task_table[NR_TASK]; // 任务表
-static list_t block_list;           //任务默认阻塞链表
-static list_t sleep_list;
+static task_t *task_table[NR_TASKS]; // 任务表
+static list_t block_list;            // 任务默认阻塞链表
+static list_t sleep_list;            // 任务睡眠链表
 
 static task_t *idle_task;
 
-
-// 从task_table里得到一个空闲的任务
+// 从 task_table 里获得一个空闲的任务
 static task_t *get_free_task()
 {
-    for (size_t i = 0; i < NR_TASK; i++)
+    for (size_t i = 0; i < NR_TASKS; i++)
     {
         if (task_table[i] == NULL)
         {
-            task_t *task= (task_t *)alloc_kpage(1);
+            task_t *task = (task_t *)alloc_kpage(1);
             memset(task, 0, PAGE_SIZE);
             task->pid = i;
             task_table[i] = task;
@@ -49,14 +47,14 @@ static task_t *get_free_task()
     panic("No more tasks");
 }
 
-//获得进程id
+// 获取进程 id
 pid_t sys_getpid()
 {
     task_t *task = running_task();
     return task->pid;
 }
 
-// 获得父进程id
+// 获取父进程 id
 pid_t sys_getppid()
 {
     task_t *task = running_task();
@@ -80,8 +78,6 @@ fd_t task_get_fd(task_t *task)
 
 void task_put_fd(task_t *task, fd_t fd)
 {
-    if(fd<3)
-        return;
     assert(fd < TASK_FILE_NR);
     task->files[fd] = NULL;
 }
@@ -93,7 +89,7 @@ static task_t *task_search(task_state_t state)
     task_t *task = NULL;
     task_t *current = running_task();
 
-    for (size_t i = 0; i < NR_TASK; i++)
+    for (size_t i = 0; i < NR_TASKS; i++)
     {
         task_t *ptr = task_table[i];
         if (ptr == NULL)
@@ -106,7 +102,8 @@ static task_t *task_search(task_state_t state)
         if (task == NULL || task->ticks < ptr->ticks || ptr->jiffies < task->jiffies)
             task = ptr;
     }
-    if(task==NULL&&state==TASK_READY)
+
+    if (task == NULL && state == TASK_READY)
     {
         task = idle_task;
     }
@@ -132,7 +129,8 @@ void task_block(task_t *task, list_t *blist, task_state_t state)
     }
 
     list_push(blist, &task->node);
-    assert(state != TASK_RUNNING && state != TASK_READY);
+
+    assert(state != TASK_READY && state != TASK_RUNNING);
 
     task->state = state;
 
@@ -149,7 +147,7 @@ void task_unblock(task_t *task)
     assert(!get_interrupt_state());
 
     list_remove(&task->node);
-    
+
     assert(task->node.next == NULL);
     assert(task->node.prev == NULL);
 
@@ -160,38 +158,38 @@ void task_sleep(u32 ms)
 {
     assert(!get_interrupt_state()); // 不可中断
 
-    u32 ticks = ms / jiffy;         //需要睡眠的时间片
-    ticks = ticks > 0 ? ticks : 1;  //至少睡眠一个时间片
+    u32 ticks = ms / jiffy;        // 需要睡眠的时间片
+    ticks = ticks > 0 ? ticks : 1; // 至少休眠一个时间片
 
-    //记录目标全局时间片，在哪一个时刻需要唤醒任务
+    // 记录目标全局时间片，在那个时刻需要唤醒任务
     task_t *current = running_task();
     current->ticks = jiffies + ticks;
 
-    //从睡眠链表找到比第一个当前任务唤醒时间点更晚的任务，进入插入排序
-    list_insert_sort(
-        &sleep_list, &current->node, element_node_offset(task_t, node, ticks));
+    // 从睡眠链表找到第一个比当前任务唤醒时间点更晚的任务，进行插入排序
+    list_insert_sort(&sleep_list, &current->node, element_node_offset(task_t, node, ticks));
 
-    //阻塞状态是睡眠
+    // 阻塞状态是睡眠
     current->state = TASK_SLEEPING;
 
-    //调度执行其他的任务
+    // 调度执行其他任务
     schedule();
 }
+
 void task_wakeup()
 {
-    assert(!get_interrupt_state());  //不可中断
-    
-    //从睡眠链表之中找到 ticks 小于等于 jiffies 的任务，恢复执行
+    assert(!get_interrupt_state()); // 不可中断
+
+    // 从睡眠链表中找到 ticks 小于等于 jiffies 的任务，恢复执行
     list_t *list = &sleep_list;
     for (list_node_t *ptr = list->head.next; ptr != &list->tail;)
     {
         task_t *task = element_entry(task_t, node, ptr);
-        if(task->ticks>jiffies)
+        if (task->ticks > jiffies)
         {
             break;
         }
 
-        //unblock 会将指针清空
+        // unblock 会将指针清空
         ptr = ptr->next;
 
         task->ticks = 0;
@@ -225,7 +223,7 @@ task_t *running_task()
 
 void schedule()
 {
-    assert(!get_interrupt_state());//不可中断
+    assert(!get_interrupt_state()); // 不可中断
 
     task_t *current = running_task();
     task_t *next = task_search(TASK_READY);
@@ -242,24 +240,20 @@ void schedule()
     {
         current->ticks = current->priority;
     }
-    if(!current->ticks)
-    {
-        current->ticks = current->priority;
-    }
 
     next->state = TASK_RUNNING;
     if (next == current)
         return;
 
-    task_activate(next);  // 激活下一进程
-    task_switch(next);    // 调度到下一进程
+    task_activate(next);
+    task_switch(next);
 }
 
 static task_t *task_create(target_t target, const char *name, u32 priority, u32 uid)
 {
     task_t *task = get_free_task();
 
-    u32 stack  = (u32)task + PAGE_SIZE;
+    u32 stack = (u32)task + PAGE_SIZE;
 
     stack -= sizeof(task_frame_t);
     task_frame_t *frame = (task_frame_t *)stack;
@@ -270,23 +264,28 @@ static task_t *task_create(target_t target, const char *name, u32 priority, u32 
     frame->eip = (void *)target;
 
     strcpy((char *)task->name, name);
+
     task->stack = (u32 *)stack;
     task->priority = priority;
     task->ticks = task->priority;
     task->jiffies = 0;
     task->state = TASK_READY;
     task->uid = uid;
-    task->gid = 0;
+    task->gid = 0; // TODO: group
     task->vmap = &kernel_map;
-    task->pde = KERNEL_PAGE_DIR;
-    task->brk = KERNEL_MEMORY_SIZE;
-    task->iroot =task->ipwd =get_root_inode();
+    task->pde = KERNEL_PAGE_DIR; // page directory entry
+    task->brk = USER_EXEC_ADDR;
+    task->text = USER_EXEC_ADDR;
+    task->data = USER_EXEC_ADDR;
+    task->end = USER_EXEC_ADDR;
+    task->iexec = NULL;
+    task->iroot = task->ipwd = get_root_inode();
     task->iroot->count += 2;
 
     task->pwd = (void *)alloc_kpage(1);
     strcpy(task->pwd, "/");
 
-    task->umask = 0022;
+    task->umask = 0022; // 对应 0755
 
     task->files[STDIN_FILENO] = &file_table[STDIN_FILENO];
     task->files[STDOUT_FILENO] = &file_table[STDOUT_FILENO];
@@ -296,18 +295,22 @@ static task_t *task_create(target_t target, const char *name, u32 priority, u32 
     task->files[STDERR_FILENO]->count++;
 
     task->magic = ONIX_MAGIC;
+
     return task;
 }
 
-void task_to_user_mode(target_t *target)
+// 调用该函数的地方不能有任何局部变量
+// 调用前栈顶需要准备足够的空间
+void task_to_user_mode(target_t target)
 {
     task_t *task = running_task();
 
+    // 创建用户进程虚拟内存位图
     task->vmap = kmalloc(sizeof(bitmap_t));
     void *buf = (void *)alloc_kpage(1);
     bitmap_init(task->vmap, buf, USER_MMAP_SIZE / PAGE_SIZE / 8, USER_MMAP_ADDR / PAGE_SIZE);
 
-    //创建用户进程页表
+    // 创建用户进程页表
     task->pde = (u32)copy_pde();
     set_cr3(task->pde);
 
@@ -381,7 +384,6 @@ pid_t task_fork()
 
     child->pid = pid;
     child->ppid = task->pid;
-
     child->ticks = child->priority;
     child->state = TASK_READY;
 
@@ -404,6 +406,8 @@ pid_t task_fork()
     // 工作目录引用加一
     task->ipwd->count++;
     task->iroot->count++;
+    if (task->iexec)
+        task->iexec->count++;
 
     // 文件引用加一
     for (size_t i = 0; i < TASK_FILE_NR; i++)
@@ -438,6 +442,7 @@ void task_exit(int status)
     free_kpage((u32)task->pwd, 1);
     iput(task->ipwd);
     iput(task->iroot);
+    iput(task->iexec);
 
     for (size_t i = 0; i < TASK_FILE_NR; i++)
     {
@@ -449,7 +454,7 @@ void task_exit(int status)
     }
 
     // 将子进程的父进程赋值为自己的父进程
-    for (size_t i = 2; i < NR_TASK; i++)
+    for (size_t i = 2; i < NR_TASKS; i++)
     {
         task_t *child = task_table[i];
         if (!child)
@@ -458,7 +463,7 @@ void task_exit(int status)
             continue;
         child->ppid = task->ppid;
     }
-    LOGK("task 0x%p exit....\n", task);
+    LOGK("task %s 0x%p exit....\n", task->name, task);
 
     task_t *parent = task_table[task->ppid];
     if (parent->state == TASK_WAITING &&
@@ -478,7 +483,7 @@ pid_t task_waitpid(pid_t pid, int32 *status)
     while (true)
     {
         bool has_child = false;
-        for (size_t i = 2; i < NR_TASK; i++)
+        for (size_t i = 2; i < NR_TASKS; i++)
         {
             task_t *ptr = task_table[i];
             if (!ptr)
@@ -536,7 +541,8 @@ void task_init()
     list_init(&sleep_list);
 
     task_setup();
+
     idle_task = task_create(idle_thread, "idle", 1, KERNEL_USER);
     task_create(init_thread, "init", 5, NORMAL_USER);
-    task_create(test_thread, "test", 5, KERNEL_USER);
+    task_create(test_thread, "test", 5, NORMAL_USER);
 }
